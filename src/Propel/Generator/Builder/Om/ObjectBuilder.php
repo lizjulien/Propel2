@@ -58,6 +58,11 @@ class ObjectBuilder extends AbstractObjectBuilder
         return $this->getBuildProperty('basePrefix') . $this->getStubObjectBuilder()->getUnprefixedClassname();
     }
 
+    public function getTableMapClass()
+    {
+        return $this->getStubObjectBuilder()->getClassname().'TableMap';
+    }
+
     /**
      * Validates the current table to make sure that it won't
      * result in generated code that will not parse.
@@ -220,6 +225,7 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
     {
         $this->declareClassFromBuilder($this->getStubPeerBuilder());
         $this->declareClassFromBuilder($this->getStubQueryBuilder());
+        $this->declareClassFromBuilder($this->getTableMapBuilder());
         $this->declareClasses(
             '\Propel\Runtime\Propel',
             '\Propel\Runtime\Exception\PropelException',
@@ -229,6 +235,7 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
             '\Propel\Runtime\Om\BaseObject',
             '\Propel\Runtime\Om\Persistent',
             '\Propel\Runtime\Util\BasePeer',
+            '\Propel\Runtime\Map\TableMap',
             '\Propel\Runtime\Collection\Collection',
             '\Propel\Runtime\Collection\ObjectCollection',
             '\Exception'
@@ -335,6 +342,11 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
      * Peer class name
      */
     const PEER = '" . addslashes($this->getStubPeerBuilder()->getFullyQualifiedClassname()) . "';
+
+    /**
+     * TableMap class name
+     */
+    const TABLE_MAP_CLASS = '". addslashes($this->getTableMapBuilder()->getFullyQualifiedClassname()) . "';
 ";
     }
 
@@ -987,7 +999,7 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
         if (null === \$this->$clo) {
             return null;
         }
-        \$valueSet = " . $this->getPeerClassname() . "::getValueSet(" . $this->getColumnConstant($col) . ");
+        \$valueSet = " . $this->getTableMapClass() . "::getValueSet(" . $this->getColumnConstant($col) . ");
         if (!isset(\$valueSet[\$this->$clo])) {
             throw new PropelException('Unknown stored enum key: ' . \$this->$clo);
         }
@@ -1643,7 +1655,7 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
 
         $script .= "
         if (\$v !== null) {
-            \$valueSet = " . $this->getPeerClassname() . "::getValueSet(" . $this->getColumnConstant($col) . ");
+            \$valueSet = " . $this->getTableMapClass() . "::getValueSet(" . $this->getColumnConstant($col) . ");
             if (!in_array(\$v, \$valueSet)) {
                 throw new PropelException(sprintf('Value \"%s\" is not accepted in this enumerated column', \$v));
             }
@@ -1957,7 +1969,7 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
                 \$this->ensureConsistency();
             }
 
-            return \$startcol + $n; // $n = ".$this->getPeerClassname()."::NUM_HYDRATE_COLUMNS.
+            return \$startcol + $n; // $n = ".$this->getTableMapClass()."::NUM_HYDRATE_COLUMNS.
 
         } catch (Exception \$e) {
             throw new PropelException(\"Error populating ".$this->getStubObjectBuilder()->getClassname()." object\", 0, \$e);
@@ -2026,7 +2038,7 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
     protected function addBuildPkeyCriteriaBody(&$script)
     {
         $script .= "
-        \$criteria = new Criteria(".$this->getPeerClassname()."::DATABASE_NAME);";
+        \$criteria = new Criteria(".$this->getTableMapClass()."::DATABASE_NAME);";
         foreach ($this->getTable()->getPrimaryKey() as $col) {
             $clo = strtolower($col->getName());
             $script .= "
@@ -2095,7 +2107,7 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
     protected function addBuildCriteriaBody(&$script)
     {
         $script .= "
-        \$criteria = new Criteria(".$this->getPeerClassname()."::DATABASE_NAME);
+        \$criteria = new Criteria(".$this->getTableMapClass()."::DATABASE_NAME);
 ";
         foreach ($this->getTable()->getColumns() as $col) {
             $clo = strtolower($col->getName());
@@ -2136,9 +2148,9 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
      * You can specify the key type of the array by passing one of the class
      * type constants.
      *
-     * @param     string  \$keyType (optional) One of the class type constants BasePeer::TYPE_PHPNAME, BasePeer::TYPE_STUDLYPHPNAME,
-     *                    BasePeer::TYPE_COLNAME, BasePeer::TYPE_FIELDNAME, BasePeer::TYPE_NUM.
-     *                    Defaults to BasePeer::TYPE_PHPNAME.
+     * @param     string  \$keyType (optional) One of the class type constants TableMap::TYPE_PHPNAME, TableMap::TYPE_STUDLYPHPNAME,
+     *                    TableMap::TYPE_COLNAME, TableMap::TYPE_FIELDNAME, TableMap::TYPE_NUM.
+     *                    Defaults to TableMap::TYPE_PHPNAME.
      * @param     boolean \$includeLazyLoadColumns (optional) Whether to include lazy loaded columns. Defaults to TRUE.
      * @param     array \$alreadyDumpedObjects List of objects to skip to avoid recursion";
         if ($hasFks) {
@@ -2149,13 +2161,13 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
      *
      * @return    array an associative array containing the field names (as keys) and field values
      */
-    public function toArray(\$keyType = BasePeer::TYPE_PHPNAME, \$includeLazyLoadColumns = true, \$alreadyDumpedObjects = array()" . ($hasFks ? ", \$includeForeignObjects = false" : '') . ")
+    public function toArray(\$keyType = TableMap::TYPE_PHPNAME, \$includeLazyLoadColumns = true, \$alreadyDumpedObjects = array()" . ($hasFks ? ", \$includeForeignObjects = false" : '') . ")
     {
         if (isset(\$alreadyDumpedObjects['$objectClassName'][$pkGetter])) {
             return '*RECURSION*';
         }
         \$alreadyDumpedObjects['$objectClassName'][$pkGetter] = true;
-        \$keys = ".$this->getPeerClassname()."::getFieldNames(\$keyType);
+        \$keys = ".$this->getTableMapClass()."::getFieldNames(\$keyType);
         \$result = array(";
         foreach ($this->getTable()->getColumns() as $num => $col) {
             if ($col->isLazyLoad()) {
@@ -2225,8 +2237,8 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
      *
      * @param      string \$name name
      * @param      string \$type The type of fieldname the \$name is of:
-     *                     one of the class type constants BasePeer::TYPE_PHPNAME, BasePeer::TYPE_STUDLYPHPNAME
-     *                     BasePeer::TYPE_COLNAME, BasePeer::TYPE_FIELDNAME, BasePeer::TYPE_NUM
+     *                     one of the class type constants TableMap::TYPE_PHPNAME, TableMap::TYPE_STUDLYPHPNAME
+     *                     TableMap::TYPE_COLNAME, TableMap::TYPE_FIELDNAME, TableMap::TYPE_NUM
      * @return     mixed Value of field.
      */";
     }
@@ -2239,7 +2251,7 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
     protected function addGetByNameOpen(&$script)
     {
         $script .= "
-    public function getByName(\$name, \$type = BasePeer::TYPE_PHPNAME)
+    public function getByName(\$name, \$type = TableMap::TYPE_PHPNAME)
     {";
     }
 
@@ -2251,7 +2263,7 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
     protected function addGetByNameBody(&$script)
     {
         $script .= "
-        \$pos = ".$this->getPeerClassname()."::translateFieldName(\$name, \$type, BasePeer::TYPE_NUM);
+        \$pos = ".$this->getTableMapClass()."::translateFieldName(\$name, \$type, TableMap::TYPE_NUM);
         \$field = \$this->getByPosition(\$pos);";
     }
 
@@ -2354,16 +2366,16 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
     /**
      * Sets a field from the object by name passed in as a string.
      *
-     * @param      string \$name peer name
+     * @param      string \$name table map name
      * @param      mixed \$value field value
      * @param      string \$type The type of fieldname the \$name is of:
-     *                     one of the class type constants BasePeer::TYPE_PHPNAME, BasePeer::TYPE_STUDLYPHPNAME
-     *                     BasePeer::TYPE_COLNAME, BasePeer::TYPE_FIELDNAME, BasePeer::TYPE_NUM
+     *                     one of the class type constants TableMap::TYPE_PHPNAME, TableMap::TYPE_STUDLYPHPNAME
+     *                     TableMap::TYPE_COLNAME, TableMap::TYPE_FIELDNAME, TableMap::TYPE_NUM
      * @return     void
      */
-    public function setByName(\$name, \$value, \$type = BasePeer::TYPE_PHPNAME)
+    public function setByName(\$name, \$value, \$type = TableMap::TYPE_PHPNAME)
     {
-        \$pos = ".$this->getPeerClassname()."::translateFieldName(\$name, \$type, BasePeer::TYPE_NUM);
+        \$pos = ".$this->getTableMapClass()."::translateFieldName(\$name, \$type, TableMap::TYPE_NUM);
 
         return \$this->setByPosition(\$pos, \$value);
     }
@@ -2394,7 +2406,7 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
 
             if (PropelTypes::ENUM === $col->getType()) {
                 $script .= "
-                \$valueSet = " . $this->getPeerClassname() . "::getValueSet(" . $this->getColumnConstant($col) . ");
+                \$valueSet = " . $this->getTableMapClass() . "::getValueSet(" . $this->getColumnConstant($col) . ");
                 if (isset(\$valueSet[\$value])) {
                     \$value = \$valueSet[\$value];
                 }";
@@ -2430,17 +2442,17 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
      * array. If so the setByName() method is called for that column.
      *
      * You can specify the key type of the array by additionally passing one
-     * of the class type constants BasePeer::TYPE_PHPNAME, BasePeer::TYPE_STUDLYPHPNAME,
-     * BasePeer::TYPE_COLNAME, BasePeer::TYPE_FIELDNAME, BasePeer::TYPE_NUM.
+     * of the class type constants TableMap::TYPE_PHPNAME, TableMap::TYPE_STUDLYPHPNAME,
+     * TableMap::TYPE_COLNAME, TableMap::TYPE_FIELDNAME, TableMap::TYPE_NUM.
      * The default key type is the column's phpname (e.g. 'AuthorId')
      *
      * @param      array  \$arr     An array to populate the object from.
      * @param      string \$keyType The type of keys the array uses.
      * @return     void
      */
-    public function fromArray(\$arr, \$keyType = BasePeer::TYPE_PHPNAME)
+    public function fromArray(\$arr, \$keyType = TableMap::TYPE_PHPNAME)
     {
-        \$keys = ".$this->getPeerClassname()."::getFieldNames(\$keyType);
+        \$keys = ".$this->getTableMapClass()."::getFieldNames(\$keyType);
 ";
         foreach ($table->getColumns() as $num => $col) {
             $cfc = $col->getPhpName();
@@ -2508,7 +2520,7 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
         }
 
         if (\$con === null) {
-            \$con = Propel::getServiceContainer()->getWriteConnection(".$this->getPeerClassname()."::DATABASE_NAME);
+            \$con = Propel::getServiceContainer()->getWriteConnection(".$this->getTableMapClass()."::DATABASE_NAME);
         }
 
         \$con->beginTransaction();
@@ -2592,7 +2604,7 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
         }
 
         if (\$con === null) {
-            \$con = Propel::getServiceContainer()->getReadConnection(".$this->getPeerClassname()."::DATABASE_NAME);
+            \$con = Propel::getServiceContainer()->getReadConnection(".$this->getTableMapClass()."::DATABASE_NAME);
         }
 
         // We don't need to alter the object instance pool; we're just modifying this instance
@@ -4611,7 +4623,7 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
         }
 
         if (\$con === null) {
-            \$con = Propel::getServiceContainer()->getWriteConnection(".$this->getPeerClassname()."::DATABASE_NAME);
+            \$con = Propel::getServiceContainer()->getWriteConnection(".$this->getTableMapClass()."::DATABASE_NAME);
         }
 
         \$con->beginTransaction();
@@ -5197,7 +5209,7 @@ abstract class ".$this->getClassname()." extends ".$parentClass." ";
      */
     public function __toString()
     {
-        return (string) \$this->exportTo(" . $this->getPeerClassname() . "::DEFAULT_STRING_FORMAT);
+        return (string) \$this->exportTo(" . $this->getTableMapClass() . "::DEFAULT_STRING_FORMAT);
     }
 ";
     }

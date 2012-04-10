@@ -43,6 +43,11 @@ class QueryBuilder extends AbstractOMBuilder
         }
     }
 
+    public function getTableMapClass()
+    {
+        return $this->getStubObjectBuilder()->getClassname().'TableMap';
+    }
+
     /**
      * Returns the name of the current class being built.
      * @return     string
@@ -167,6 +172,7 @@ abstract class ".$this->getClassname()." extends " . $parentClass . "
         );
         $this->declareClassFromBuilder($this->getStubQueryBuilder());
         $this->declareClassFromBuilder($this->getStubPeerBuilder());
+        $this->declareClassFromBuilder($this->getTableMapBuilder());
 
         // apply behaviors
         $this->applyBehaviorModifier('queryAttributes', $script, "    ");
@@ -359,6 +365,7 @@ abstract class ".$this->getClassname()." extends " . $parentClass . "
     {
         $class = $this->getObjectClassname();
         $peerClassname = $this->getPeerClassname();
+        $tableMapClassname = $this->getTableMapClass();
         $table = $this->getTable();
         $script .= "
     /**
@@ -411,7 +418,7 @@ abstract class ".$this->getClassname()." extends " . $parentClass . "
             return \$obj;
         }
         if (\$con === null) {
-            \$con = Propel::getServiceContainer()->getReadConnection({$peerClassname}::DATABASE_NAME);
+            \$con = Propel::getServiceContainer()->getReadConnection({$tableMapClassname}::DATABASE_NAME);
         }
         \$this->basePreSelect(\$con);
         if (\$this->formatter || \$this->modelAlias || \$this->with || \$this->select
@@ -842,7 +849,7 @@ abstract class ".$this->getClassname()." extends " . $parentClass . "
         }";
         } elseif ($col->getType() == PropelTypes::ENUM) {
             $script .= "
-        \$valueSet = " . $this->getPeerClassname() . "::getValueSet(" . $this->getColumnConstant($col) . ");
+        \$valueSet = " . $this->getTableMapClass() . "::getValueSet(" . $this->getColumnConstant($col) . ");
         if (is_scalar(\$$variableName)) {
             if (!in_array(\$$variableName, \$valueSet)) {
                 throw new PropelException(sprintf('Value \"%s\" is not accepted in this enumerated column', \$$variableName));

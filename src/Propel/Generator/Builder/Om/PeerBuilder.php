@@ -123,6 +123,7 @@ abstract class ".$this->getClassname(). $extendingPeerClass . " {
     {
         $this->declareClassFromBuilder($this->getStubPeerBuilder());
         $this->declareClassFromBuilder($this->getStubObjectBuilder());
+        $this->declareClassFromBuilder($this->getTableMapBuilder());
 
         parent::addClassBody($script);
 
@@ -151,21 +152,6 @@ abstract class ".$this->getClassname(). $extendingPeerClass . " {
         $script .= "
 } // " . $this->getClassname() . "
 ";
-        $this->addStaticTableMapRegistration($script);
-    }
-
-    /**
-     * Adds the static map builder registration code.
-     * @param      string &$script The script will be modified in this method.
-     */
-    protected function addStaticTableMapRegistration(&$script)
-    {
-        $script .= "
-// This is the static code needed to register the TableMap for this table with the main Propel class.
-//
-".$this->getClassName()."::buildTableMap();
-
-";
         $this->applyBehaviorModifier('peerFilter', $script, '');
     }
 
@@ -180,385 +166,6 @@ abstract class ".$this->getClassname(). $extendingPeerClass . " {
     }
 
     /**
-     * Adds constant and variable declarations that go at the top of the class.
-     * @param      string &$script The script will be modified in this method.
-     * @see        addColumnNameConstants()
-     */
-    protected function addConstantsAndAttributes(&$script)
-    {
-        $dbName = $this->getDatabase()->getName();
-        $tableName = $this->getTable()->getName();
-        $tablePhpName = $this->getTable()->isAbstract() ? '' : addslashes($this->getStubObjectBuilder()->getFullyQualifiedClassname());
-        $script .= "
-    /** the default database name for this class */
-    const DATABASE_NAME = '$dbName';
-
-    /** the table name for this class */
-    const TABLE_NAME = '$tableName';
-
-    /** the related Propel class for this table */
-    const OM_CLASS = '$tablePhpName';
-
-    /** A class that can be returned by this peer. */
-    const CLASS_DEFAULT = '".$this->getStubObjectBuilder()->getClasspath()."';
-
-    /** the related TableMap class for this table */
-    const TM_CLASS = '".$this->getTableMapClass()."';
-
-    /** The total number of columns. */
-    const NUM_COLUMNS = ".$this->getTable()->getNumColumns().";
-
-    /** The number of lazy-loaded columns. */
-    const NUM_LAZY_LOAD_COLUMNS = ".$this->getTable()->getNumLazyLoadColumns().";
-
-    /** The number of columns to hydrate (NUM_COLUMNS - NUM_LAZY_LOAD_COLUMNS) */
-    const NUM_HYDRATE_COLUMNS = ". ($this->getTable()->getNumColumns() - $this->getTable()->getNumLazyLoadColumns()) .";
-";
-        $this->addColumnNameConstants($script);
-        $this->addInheritanceColumnConstants($script);
-        if ($this->getTable()->hasEnumColumns()) {
-            $this->addEnumColumnConstants($script);
-        }
-
-        $script .= "
-    /** The default string format for model objects of the related table **/
-    const DEFAULT_STRING_FORMAT = '" . $this->getTable()->getDefaultStringFormat() . "';
-
-    /**
-     * An identiy map to hold any loaded instances of ".$this->getObjectClassname()." objects.
-     * This must be public so that other peer classes can access this when hydrating from JOIN
-     * queries.
-     * @var        array ".$this->getObjectClassname()."[]
-     */
-    static public \$instances = array();
-
-";
-
-        // apply behaviors
-        $this->applyBehaviorModifier('staticConstants', $script, "    ");
-        $this->applyBehaviorModifier('staticAttributes', $script, "    ");
-
-        $this->addFieldNamesAttribute($script);
-        $this->addFieldKeysAttribute($script);
-
-        if ($this->getTable()->hasEnumColumns()) {
-            $this->addEnumColumnAttributes($script);
-        }
-    }
-
-    /**
-     * Adds the COLUMN_NAME contants to the class definition.
-     * @param      string &$script The script will be modified in this method.
-     */
-    protected function addColumnNameConstants(&$script)
-    {
-        foreach ($this->getTable()->getColumns() as $col) {
-            $script .= "
-    /** the column name for the " . strtoupper($col->getName()) ." field */
-    const ".$this->getColumnName($col) ." = '" . $this->getTable()->getName() . ".".strtoupper($col->getName())."';
-";
-        } // foreach
-    }
-
-    /**
-     * Adds the valueSet constants for ENUM columns.
-     * @param      string &$script The script will be modified in this method.
-     */
-    protected function addEnumColumnConstants(&$script)
-    {
-        foreach ($this->getTable()->getColumns() as $col) {
-            if ($col->isEnumType()) {
-                $script .= "
-    /** The enumerated values for the " . strtoupper($col->getName()) . " field */";
-                foreach ($col->getValueSet() as $value) {
-                    $script .= "
-    const " . $this->getColumnName($col) . '_' . $this->getEnumValueConstant($value) . " = '" . $value . "';";
-                }
-                $script .= "
-";
-            }
-        }
-    }
-
-    protected function getEnumValueConstant($value)
-    {
-        return strtoupper(preg_replace('/[^a-zA-Z0-9_\x7f-\xff]/', '_', $value));
-    }
-
-    protected function addFieldNamesAttribute(&$script)
-    {
-        $table = $this->getTable();
-
-        $tableColumns = $table->getColumns();
-
-        $script .= "
-    /**
-     * holds an array of fieldnames
-     *
-     * first dimension keys are the type constants
-     * e.g. self::\$fieldNames[self::TYPE_PHPNAME][0] = 'Id'
-     */
-    protected static \$fieldNames = array (
-        BasePeer::TYPE_PHPNAME => array (";
-        foreach ($tableColumns as $col) {
-            $script .= "'".$col->getPhpName()."', ";
-        }
-        $script .= "),
-        BasePeer::TYPE_STUDLYPHPNAME => array (";
-        foreach ($tableColumns as $col) {
-            $script .= "'".$col->getStudlyPhpName()."', ";
-        }
-        $script .= "),
-        BasePeer::TYPE_COLNAME => array (";
-        foreach ($tableColumns as $col) {
-            $script .= $this->getColumnConstant($col, 'self').", ";
-        }
-        $script .= "),
-        BasePeer::TYPE_RAW_COLNAME => array (";
-        foreach ($tableColumns as $col) {
-            $script .= "'" . $col->getConstantColumnName() . "', ";
-        }
-        $script .= "),
-        BasePeer::TYPE_FIELDNAME => array (";
-        foreach ($tableColumns as $col) {
-            $script .= "'".$col->getName()."', ";
-        }
-        $script .= "),
-        BasePeer::TYPE_NUM => array (";
-        foreach ($tableColumns as $num => $col) {
-            $script .= "$num, ";
-        }
-        $script .= ")
-    );
-";
-    }
-
-    protected function addFieldKeysAttribute(&$script)
-    {
-        $table = $this->getTable();
-
-        $tableColumns = $table->getColumns();
-
-        $script .= "
-    /**
-     * holds an array of keys for quick access to the fieldnames array
-     *
-     * first dimension keys are the type constants
-     * e.g. self::\$fieldNames[BasePeer::TYPE_PHPNAME]['Id'] = 0
-     */
-    protected static \$fieldKeys = array (
-        BasePeer::TYPE_PHPNAME => array (";
-        foreach ($tableColumns as $num => $col) {
-            $script .= "'".$col->getPhpName()."' => $num, ";
-        }
-        $script .= "),
-        BasePeer::TYPE_STUDLYPHPNAME => array (";
-        foreach ($tableColumns as $num => $col) {
-            $script .= "'".$col->getStudlyPhpName()."' => $num, ";
-        }
-        $script .= "),
-        BasePeer::TYPE_COLNAME => array (";
-        foreach ($tableColumns as $num => $col) {
-            $script .= $this->getColumnConstant($col, 'self')." => $num, ";
-        }
-        $script .= "),
-        BasePeer::TYPE_RAW_COLNAME => array (";
-        foreach ($tableColumns as $num => $col) {
-            $script .= "'" . $col->getConstantColumnName() . "' => $num, ";
-        }
-        $script .= "),
-        BasePeer::TYPE_FIELDNAME => array (";
-        foreach ($tableColumns as $num => $col) {
-            $script .= "'".$col->getName()."' => $num, ";
-        }
-        $script .= "),
-        BasePeer::TYPE_NUM => array (";
-        foreach ($tableColumns as $num => $col) {
-            $script .= "$num, ";
-        }
-        $script .= ")
-    );
-";
-    } // addFielKeysAttribute
-
-    /**
-     * Adds the valueSet attributes for ENUM columns.
-     * @param      string &$script The script will be modified in this method.
-     */
-    protected function addEnumColumnAttributes(&$script)
-    {
-        $script .= "
-    /** The enumerated values for this table */
-    protected static \$enumValueSets = array(";
-        foreach ($this->getTable()->getColumns() as $col) {
-            if ($col->isEnumType()) {
-                $script .= "
-        self::" . $this->getColumnName($col) ." => array(
-";
-                foreach ($col->getValueSet() as $value) {
-                    $script .= "            " . $this->getStubPeerBuilder()->getClassname() . '::' . $this->getColumnName($col) . '_' . $this->getEnumValueConstant($value) . ",
-";
-                }
-                $script .= "        ),";
-            }
-        }
-        $script .= "
-    );
-";
-    }
-
-    protected function addGetFieldNames(&$script)
-    {
-        $script .= "
-    /**
-     * Returns an array of field names.
-     *
-     * @param      string \$type The type of fieldnames to return:
-     *                      One of the class type constants BasePeer::TYPE_PHPNAME, BasePeer::TYPE_STUDLYPHPNAME
-     *                      BasePeer::TYPE_COLNAME, BasePeer::TYPE_FIELDNAME, BasePeer::TYPE_NUM
-     * @return     array A list of field names
-     */
-
-    static public function getFieldNames(\$type = BasePeer::TYPE_PHPNAME)
-    {
-        if (!array_key_exists(\$type, self::\$fieldNames)) {
-            throw new PropelException('Method getFieldNames() expects the parameter \$type to be one of the class constants BasePeer::TYPE_PHPNAME, BasePeer::TYPE_STUDLYPHPNAME, BasePeer::TYPE_COLNAME, BasePeer::TYPE_FIELDNAME, BasePeer::TYPE_NUM. ' . \$type . ' was given.');
-        }
-
-        return self::\$fieldNames[\$type];
-    }
-";
-
-    } // addGetFieldNames()
-
-    protected function addTranslateFieldName(&$script)
-    {
-        $script .= "
-    /**
-     * Translates a fieldname to another type
-     *
-     * @param      string \$name field name
-     * @param      string \$fromType One of the class type constants BasePeer::TYPE_PHPNAME, BasePeer::TYPE_STUDLYPHPNAME
-     *                         BasePeer::TYPE_COLNAME, BasePeer::TYPE_FIELDNAME, BasePeer::TYPE_NUM
-     * @param      string \$toType   One of the class type constants
-     * @return     string translated name of the field.
-     * @throws     PropelException - if the specified name could not be found in the fieldname mappings.
-     */
-    static public function translateFieldName(\$name, \$fromType, \$toType)
-    {
-        \$toNames = self::getFieldNames(\$toType);
-        \$key = isset(self::\$fieldKeys[\$fromType][\$name]) ? self::\$fieldKeys[\$fromType][\$name] : null;
-        if (\$key === null) {
-            throw new PropelException(\"'\$name' could not be found in the field names of type '\$fromType'. These are: \" . print_r(self::\$fieldKeys[\$fromType], true));
-        }
-
-        return \$toNames[\$key];
-    }
-";
-    } // addTranslateFieldName()
-
-    /**
-     * Adds the getValueSets() method.
-     * @param      string &$script The script will be modified in this method.
-     */
-    protected function addGetValueSets(&$script)
-    {
-        $this->declareClassFromBuilder($this->getTableMapBuilder());
-        $callingClass = $this->getStubPeerBuilder()->getClassname();
-        $script .= "
-    /**
-     * Gets the list of values for all ENUM columns
-     * @return array
-     */
-    static public function getValueSets()
-    {
-      return {$callingClass}::\$enumValueSets;
-    }
-";
-    }
-
-    /**
-     * Adds the getValueSet() method.
-     * @param      string &$script The script will be modified in this method.
-     */
-    protected function addGetValueSet(&$script)
-    {
-        $this->declareClassFromBuilder($this->getTableMapBuilder());
-        $script .= "
-    /**
-     * Gets the list of values for an ENUM column
-     * @return array list of possible values for the column
-     */
-    static public function getValueSet(\$colname)
-    {
-        \$valueSets = self::getValueSets();
-
-        return \$valueSets[\$colname];
-    }
-";
-    }
-
-    /**
-     * Adds the buildTableMap() method.
-     * @param      string &$script The script will be modified in this method.
-     */
-    protected function addBuildTableMap(&$script)
-    {
-        $this->declareClassFromBuilder($this->getTableMapBuilder());
-        $script .= "
-    /**
-     * Add a TableMap instance to the database for this peer class.
-     */
-    static public function buildTableMap()
-    {
-      \$dbMap = Propel::getServiceContainer()->getDatabaseMap(".$this->getClassname()."::DATABASE_NAME);
-      if (!\$dbMap->hasTable(".$this->getClassname()."::TABLE_NAME))
-      {
-        \$dbMap->addTableObject(new ".$this->getTableMapClass()."());
-      }
-    }
-";
-    }
-
-    /**
-     * Adds the CLASSKEY_* and CLASSNAME_* constants used for inheritance.
-     * @param      string &$script The script will be modified in this method.
-     */
-    public function addInheritanceColumnConstants(&$script)
-    {
-        if (!$col = $this->getTable()->getChildrenColumn()) {
-            return;
-        }
-
-        if (!$col->isEnumeratedClasses()) {
-            return;
-        }
-
-        foreach ($col->getChildren() as $child) {
-            $childBuilder = $this->getMultiExtendObjectBuilder();
-            $childBuilder->setChild($child);
-            $fqcn = addslashes($childBuilder->getFullyQualifiedClassname());
-
-            $script .= "
-    /** A key representing a particular subclass */
-    const CLASSKEY_".strtoupper($child->getKey())." = '" . $child->getKey() . "';
-";
-
-            if (strtoupper($child->getClassname()) != strtoupper($child->getKey())) {
-                $script .= "
-    /** A key representing a particular subclass */
-    const CLASSKEY_".strtoupper($child->getClassname())." = '" . $child->getKey() . "';
-";
-            }
-
-            $script .= "
-    /** A class that can be returned by this peer. */
-    const CLASSNAME_".strtoupper($child->getKey())." = '". $fqcn . "';
-";
-        }
-    }
-
-    /**
      * Adds the alias() utility method.
      * @param      string &$script The script will be modified in this method.
      */
@@ -570,8 +177,8 @@ abstract class ".$this->getClassname(). $extendingPeerClass . " {
      *
      * Using this method you can maintain SQL abstraction while using column aliases.
      * <code>
-     *        \$c->addAlias(\"alias1\", TablePeer::TABLE_NAME);
-     *        \$c->addJoin(TablePeer::alias(\"alias1\", TablePeer::PRIMARY_KEY_COLUMN), TablePeer::PRIMARY_KEY_COLUMN);
+     *        \$c->addAlias(\"alias1\", TableTableMap::TABLE_NAME);
+     *        \$c->addJoin(TableTableMap::alias(\"alias1\", TableTableMap::PRIMARY_KEY_COLUMN), TableTableMap::PRIMARY_KEY_COLUMN);
      * </code>
      * @param      string \$alias The alias for the current table.
      * @param      string \$column The column name for current table. (i.e. ".$this->getPeerClassname()."::COLUMN_NAME).
@@ -579,7 +186,7 @@ abstract class ".$this->getClassname(). $extendingPeerClass . " {
      */
     static public function alias(\$alias, \$column)
     {
-        return str_replace(".$this->getPeerClassname()."::TABLE_NAME.'.', \$alias.'.', \$column);
+        return str_replace(".$this->getTableMapClass()."::TABLE_NAME.'.', \$alias.'.', \$column);
     }
 ";
     }
@@ -609,7 +216,7 @@ abstract class ".$this->getClassname(). $extendingPeerClass . " {
         foreach ($this->getTable()->getColumns() as $col) {
             if (!$col->isLazyLoad()) {
                 $script .= "
-            \$criteria->addSelectColumn(".$this->getPeerClassname()."::".$this->getColumnName($col).");";
+            \$criteria->addSelectColumn(".$this->getTableMapClass()."::".$this->getColumnName($col).");";
             } // if !col->isLazyLoad
         } // foreach
         $script .= "
@@ -650,7 +257,7 @@ abstract class ".$this->getClassname(). $extendingPeerClass . " {
         // We need to set the primary table name, since in the case that there are no WHERE columns
         // it will be impossible for the BasePeer::createSelectSql() method to determine which
         // tables go into the FROM clause.
-        \$criteria->setPrimaryTableName(".$this->getPeerClassname()."::TABLE_NAME);
+        \$criteria->setPrimaryTableName(".$this->getTableMapClass()."::TABLE_NAME);
 
         if (\$distinct && !in_array(Criteria::DISTINCT, \$criteria->getSelectModifiers())) {
             \$criteria->setDistinct();
@@ -661,10 +268,10 @@ abstract class ".$this->getClassname(). $extendingPeerClass . " {
         }
 
         \$criteria->clearOrderByColumns(); // ORDER BY won't ever affect the count
-        \$criteria->setDbName(self::DATABASE_NAME); // Set the correct dbName
+        \$criteria->setDbName({$this->getTableMapClass()}::DATABASE_NAME); // Set the correct dbName
 
         if (null === \$con) {
-            \$con = Propel::getServiceContainer()->getReadConnection(".$this->getPeerClassname()."::DATABASE_NAME);
+            \$con = Propel::getServiceContainer()->getReadConnection(".$this->getTableMapClass()."::DATABASE_NAME);
         }";
 
         // apply behaviors
@@ -759,7 +366,7 @@ abstract class ".$this->getClassname(). $extendingPeerClass . " {
     static public function doSelectStmt(Criteria \$criteria, ConnectionInterface \$con = null)
     {
         if (null === \$con) {
-            \$con = Propel::getServiceContainer()->getReadConnection(".$this->getPeerClassname()."::DATABASE_NAME);
+            \$con = Propel::getServiceContainer()->getReadConnection(".$this->getTableMapClass()."::DATABASE_NAME);
         }
 
         if (!\$criteria->hasSelectClause()) {
@@ -768,7 +375,7 @@ abstract class ".$this->getClassname(). $extendingPeerClass . " {
         }
 
         // Set the correct dbName
-        \$criteria->setDbName(self::DATABASE_NAME);";
+        \$criteria->setDbName({$this->getTableMapClass()}::DATABASE_NAME);";
         // apply behaviors
         if ($this->hasBehaviorModifier('preSelect')) {
             $this->applyBehaviorModifier('preSelect', $script);
@@ -837,7 +444,7 @@ abstract class ".$this->getClassname(). $extendingPeerClass . " {
                 \$key = ".$this->getInstancePoolKeySnippet($php).";";
         $script .= "
             } // if key === null
-            self::\$instances[\$key] = \$obj;
+            {$this->getTableMapClass()}::\$instances[\$key] = \$obj;
         }
     }
 ";
@@ -897,7 +504,7 @@ abstract class ".$this->getClassname(). $extendingPeerClass . " {
                 throw \$e;
             }
 
-            unset(self::\$instances[\$key]);
+            unset({$this->getTableMapClass()}::\$instances[\$key]);
         }
     } // removeInstanceFromPool()
 ";
@@ -917,7 +524,7 @@ abstract class ".$this->getClassname(). $extendingPeerClass . " {
      */
     static public function clearInstancePool()
     {
-        self::\$instances = array();
+        {$this->getTableMapClass()}::\$instances = array();
     }
     ";
     }
@@ -983,8 +590,8 @@ abstract class ".$this->getClassname(). $extendingPeerClass . " {
     static public function getInstanceFromPool(\$key)
     {
         if (Propel::isInstancePoolingEnabled()) {
-            if (isset(self::\$instances[\$key])) {
-                return self::\$instances[\$key];
+            if (isset({$this->getTableMapClass()}::\$instances[\$key])) {
+                return {$this->getTableMapClass()}::\$instances[\$key];
             }
         }
 
@@ -1177,23 +784,23 @@ abstract class ".$this->getClassname(). $extendingPeerClass . " {
             // We no longer rehydrate the object, since this can cause data loss.
             // See http://www.propelorm.org/ticket/509
             // \$obj->hydrate(\$row, \$startcol, true); // rehydrate
-            \$col = \$startcol + " . $this->getPeerClassname() . "::NUM_HYDRATE_COLUMNS;";
+            \$col = \$startcol + " . $this->getTableMapClass() . "::NUM_HYDRATE_COLUMNS;";
         if ($table->isAbstract()) {
             $script .= "
         } elseif (null == \$key) {
             // empty resultset, probably from a left join
             // since this table is abstract, we can't hydrate an empty object
             \$obj = null;
-            \$col = \$startcol + " . $this->getPeerClassname() . "::NUM_HYDRATE_COLUMNS;";
+            \$col = \$startcol + " . $this->getTableMapClass() . "::NUM_HYDRATE_COLUMNS;";
         }
         $script .= "
         } else {";
         if (!$table->getChildrenColumn()) {
             $script .= "
-            \$cls = ".$this->getPeerClassname()."::OM_CLASS;";
+            \$cls = ".$this->getTableMapClass()."::OM_CLASS;";
         } else {
             $script .= "
-            \$cls = ".$this->getPeerClassname()."::getOMClass(\$row, \$startcol, false);";
+            \$cls = ".$this->getTableMapClass()."::getOMClass(\$row, \$startcol, false);";
         }
         $script .= "
             \$obj = new \$cls();
@@ -1237,14 +844,14 @@ abstract class ".$this->getClassname(). $extendingPeerClass . " {
 ";
             foreach ($col->getChildren() as $child) {
                 $script .= "
-                case self::CLASSKEY_".strtoupper($child->getKey()).":
-                    \$omClass = self::CLASSNAME_".strtoupper($child->getKey()).";
+                case {$this->getTableMapClass()}::CLASSKEY_".strtoupper($child->getKey()).":
+                    \$omClass = {$this->getTableMapClass()}::CLASSNAME_".strtoupper($child->getKey()).";
                     break;
 ";
             } /* foreach */
             $script .= "
                 default:
-                    \$omClass = self::CLASS_DEFAULT;
+                    \$omClass = {$this->getTableMapClass()}::CLASS_DEFAULT;
 ";
             $script .= "
             } // switch
@@ -1288,7 +895,7 @@ abstract class ".$this->getClassname(). $extendingPeerClass . " {
      */
     static public function getOMClass(\$withPrefix = true)
     {
-        return \$withPrefix ? ".$this->getPeerClassname()."::CLASS_DEFAULT : ".$this->getPeerClassname()."::OM_CLASS;
+        return \$withPrefix ? ".$this->getTableMapClass()."::CLASS_DEFAULT : ".$this->getTableMapClass()."::OM_CLASS;
     }
 ";
     }
@@ -1330,7 +937,7 @@ abstract class ".$this->getClassname(). $extendingPeerClass . " {
     static public function doInsert(\$values, ConnectionInterface \$con = null)
     {
         if (null === \$con) {
-            \$con = Propel::getServiceContainer()->getWriteConnection(".$this->getPeerClassname()."::DATABASE_NAME);
+            \$con = Propel::getServiceContainer()->getWriteConnection(".$this->getTableMapClass()."::DATABASE_NAME);
         }
 
         if (\$values instanceof Criteria) {
@@ -1374,7 +981,7 @@ abstract class ".$this->getClassname(). $extendingPeerClass . " {
         $script .= "
 
         // Set the correct dbName
-        \$criteria->setDbName(self::DATABASE_NAME);
+        \$criteria->setDbName({$this->getTableMapClass()}::DATABASE_NAME);
 
         try {
             // use transaction because \$criteria could contain info
@@ -1412,10 +1019,10 @@ abstract class ".$this->getClassname(). $extendingPeerClass . " {
     static public function doUpdate(\$values, ConnectionInterface \$con = null)
     {
         if (null === \$con) {
-            \$con = Propel::getServiceContainer()->getWriteConnection(".$this->getPeerClassname()."::DATABASE_NAME);
+            \$con = Propel::getServiceContainer()->getWriteConnection(".$this->getTableMapClass()."::DATABASE_NAME);
         }
 
-        \$selectCriteria = new Criteria(self::DATABASE_NAME);
+        \$selectCriteria = new Criteria({$this->getTableMapClass()}::DATABASE_NAME);
 
         if (\$values instanceof Criteria) {
             \$criteria = clone \$values; // rename for clarity
@@ -1428,7 +1035,7 @@ abstract class ".$this->getClassname(). $extendingPeerClass . " {
             if (\$value) {
                 \$selectCriteria->add(".$this->getColumnConstant($col).", \$value, \$comparison);
             } else {
-                \$selectCriteria->setPrimaryTableName(".$this->getPeerClassname()."::TABLE_NAME);
+                \$selectCriteria->setPrimaryTableName(".$this->getTableMapClass()."::TABLE_NAME);
             }
 ";
             }  /* if col is prim key */
@@ -1441,7 +1048,7 @@ abstract class ".$this->getClassname(). $extendingPeerClass . " {
         }
 
         // set the correct dbName
-        \$criteria->setDbName(self::DATABASE_NAME);
+        \$criteria->setDbName({$this->getTableMapClass()}::DATABASE_NAME);
 
         return {$this->basePeerClassname}::doUpdate(\$selectCriteria, \$criteria, \$con);
     }
@@ -1465,7 +1072,7 @@ abstract class ".$this->getClassname(). $extendingPeerClass . " {
     static public function doDeleteAll(ConnectionInterface \$con = null)
     {
         if (null === \$con) {
-            \$con = Propel::getServiceContainer()->getWriteConnection(".$this->getPeerClassname()."::DATABASE_NAME);
+            \$con = Propel::getServiceContainer()->getWriteConnection(".$this->getTableMapClass()."::DATABASE_NAME);
         }
         \$affectedRows = 0; // initialize var to track total num of affected rows
         try {
@@ -1474,14 +1081,14 @@ abstract class ".$this->getClassname(). $extendingPeerClass . " {
             \$con->beginTransaction();
             ";
         if ($this->isDeleteCascadeEmulationNeeded()) {
-            $script .="\$affectedRows += ".$this->getPeerClassname()."::doOnDeleteCascade(new Criteria(".$this->getPeerClassname()."::DATABASE_NAME), \$con);
+            $script .="\$affectedRows += ".$this->getPeerClassname()."::doOnDeleteCascade(new Criteria(".$this->getTableMapClass()."::DATABASE_NAME), \$con);
             ";
         }
         if ($this->isDeleteSetNullEmulationNeeded()) {
-            $script .= $this->getPeerClassname() . "::doOnDeleteSetNull(new Criteria(".$this->getPeerClassname() . "::DATABASE_NAME), \$con);
+            $script .= $this->getPeerClassname() . "::doOnDeleteSetNull(new Criteria(".$this->getTableMapClass() . "::DATABASE_NAME), \$con);
             ";
         }
-        $script .= "\$affectedRows += {$this->basePeerClassname}::doDeleteAll(".$this->getPeerClassname()."::TABLE_NAME, \$con, ".$this->getPeerClassname()."::DATABASE_NAME);
+        $script .= "\$affectedRows += {$this->basePeerClassname}::doDeleteAll(".$this->getTableMapClass()."::TABLE_NAME, \$con, ".$this->getTableMapClass()."::DATABASE_NAME);
             // Because this db requires some delete cascade/set null emulation, we have to
             // clear the cached instance *after* the emulation has happened (since
             // instances get re-added by the select statement contained therein).
@@ -1521,7 +1128,7 @@ abstract class ".$this->getClassname(). $extendingPeerClass . " {
      static public function doDelete(\$values, ConnectionInterface \$con = null)
      {
         if (null === \$con) {
-            \$con = Propel::getServiceContainer()->getWriteConnection(".$this->getPeerClassname()."::DATABASE_NAME);
+            \$con = Propel::getServiceContainer()->getWriteConnection(".$this->getTableMapClass()."::DATABASE_NAME);
         }
 
         if (\$values instanceof Criteria) {";
@@ -1554,7 +1161,7 @@ abstract class ".$this->getClassname(). $extendingPeerClass . " {
         $script .= "
         } else { // it's a primary key, or an array of pks";
         $script .= "
-            \$criteria = new Criteria(self::DATABASE_NAME);";
+            \$criteria = new Criteria({$this->getTableMapClass()}::DATABASE_NAME);";
 
         if (1 === count($table->getPrimaryKey())) {
             $pkey = $table->getPrimaryKey();
@@ -1603,7 +1210,7 @@ abstract class ".$this->getClassname(). $extendingPeerClass . " {
         }
 
         // Set the correct dbName
-        \$criteria->setDbName(self::DATABASE_NAME);
+        \$criteria->setDbName({$this->getTableMapClass()}::DATABASE_NAME);
 
         \$affectedRows = 0; // initialize var to track total num of affected rows
 
@@ -1714,7 +1321,7 @@ abstract class ".$this->getClassname(). $extendingPeerClass . " {
                     $script .= "
 
             // delete related $fkClassName objects
-            \$criteria = new Criteria(".$joinedTablePeerBuilder->getPeerClassname()."::DATABASE_NAME);
+            \$criteria = new Criteria(".$joinedTablePeerBuilder->getTableMapClass()."::DATABASE_NAME);
             ";
                     for ($x = 0, $xlen = count($columnNamesF); $x < $xlen; $x++) {
                         $columnFK = $tblFK->getColumn($columnNamesF[$x]);
@@ -1792,8 +1399,8 @@ abstract class ".$this->getClassname(). $extendingPeerClass . " {
                     $columnNamesL = $fk->getForeignColumns(); // should be same num as foreign
                     $script .= "
             // set fkey col in related $fkClassName rows to NULL
-            \$selectCriteria = new Criteria(".$this->getPeerClassname()."::DATABASE_NAME);
-            \$updateValues = new Criteria(".$this->getPeerClassname()."::DATABASE_NAME);";
+            \$selectCriteria = new Criteria(".$this->getTableMapClass()."::DATABASE_NAME);
+            \$updateValues = new Criteria(".$this->getTableMapClass()."::DATABASE_NAME);";
 
                     for ($x = 0, $xlen = count($columnNamesF); $x < $xlen; $x++) {
                         $columnFK = $tblFK->getColumn($columnNamesF[$x]);
@@ -1842,8 +1449,8 @@ abstract class ".$this->getClassname(). $extendingPeerClass . " {
         \$columns = array();
 
         if (\$cols) {
-            \$dbMap = Propel::getServiceContainer()->getDatabaseMap(".$this->getPeerClassname()."::DATABASE_NAME);
-            \$tableMap = \$dbMap->getTable(".$this->getPeerClassname()."::TABLE_NAME);
+            \$dbMap = Propel::getServiceContainer()->getDatabaseMap(".$this->getTableMapClass()."::DATABASE_NAME);
+            \$tableMap = \$dbMap->getTable(".$this->getTableMapClass()."::TABLE_NAME);
 
             if (! is_array(\$cols)) {
                 \$cols = array(\$cols);
@@ -1870,7 +1477,7 @@ abstract class ".$this->getClassname(). $extendingPeerClass . " {
         $script .= "
         }
 
-        return {$this->basePeerClassname}::doValidate(".$this->getPeerClassname()."::DATABASE_NAME, ".$this->getPeerClassname()."::TABLE_NAME, \$columns);
+        return {$this->basePeerClassname}::doValidate(".$this->getTableMapClass()."::DATABASE_NAME, ".$this->getTableMapClass()."::TABLE_NAME, \$columns);
     }
 ";
     } // end addDoValidate()
@@ -1901,10 +1508,10 @@ abstract class ".$this->getClassname(). $extendingPeerClass . " {
         }
 
         if (null === \$con) {
-            \$con = Propel::getServiceContainer()->getReadConnection(".$this->getPeerClassname()."::DATABASE_NAME);
+            \$con = Propel::getServiceContainer()->getReadConnection(".$this->getTableMapClass()."::DATABASE_NAME);
         }
 
-        \$criteria = new Criteria(".$this->getPeerClassname()."::DATABASE_NAME);
+        \$criteria = new Criteria(".$this->getTableMapClass()."::DATABASE_NAME);
         \$criteria->add(".$this->getColumnConstant($col).", \$pk);
 
         \$v = ".$this->getPeerClassname()."::doSelect(\$criteria, \$con);
@@ -1933,14 +1540,14 @@ abstract class ".$this->getClassname(). $extendingPeerClass . " {
     static public function ".$this->getRetrieveMethodName()."s(\$pks, ConnectionInterface \$con = null)
     {
         if (null === \$con) {
-            \$con = Propel::getServiceContainer()->getReadConnection(".$this->getPeerClassname()."::DATABASE_NAME);
+            \$con = Propel::getServiceContainer()->getReadConnection(".$this->getTableMapClass()."::DATABASE_NAME);
         }
 
         \$objs = null;
         if (empty(\$pks)) {
             \$objs = array();
         } else {
-            \$criteria = new Criteria(".$this->getPeerClassname()."::DATABASE_NAME);";
+            \$criteria = new Criteria(".$this->getTableMapClass()."::DATABASE_NAME);";
         $k1 = $table->getPrimaryKey();
         $script .= "
             \$criteria->add(".$this->getColumnConstant($k1[0]).", \$pks, Criteria::IN);";
@@ -1991,9 +1598,9 @@ abstract class ".$this->getClassname(). $extendingPeerClass . " {
         }
 
         if (null === \$con) {
-            \$con = Propel::getServiceContainer()->getReadConnection(".$this->getPeerClassname()."::DATABASE_NAME);
+            \$con = Propel::getServiceContainer()->getReadConnection(".$this->getTableMapClass()."::DATABASE_NAME);
         }
-        \$criteria = new Criteria(".$this->getPeerClassname()."::DATABASE_NAME);";
+        \$criteria = new Criteria(".$this->getTableMapClass()."::DATABASE_NAME);";
         foreach ($table->getPrimaryKey() as $col) {
             $clo = strtolower($col->getName());
             $script .= "
@@ -2022,47 +1629,9 @@ abstract class ".$this->getClassname(). $extendingPeerClass . " {
      */
     static public function getTableMap()
     {
-        return Propel::getServiceContainer()->getDatabaseMap(self::DATABASE_NAME)->getTable(self::TABLE_NAME);
+        return Propel::getServiceContainer()->getDatabaseMap({$this->getTableMapClass()}::DATABASE_NAME)->getTable({$this->getTableMapClass()}::TABLE_NAME);
     }
 ";
-    }
-
-    /**
-     * Adds the complex OM methods to the base addSelectMethods() function.
-     * @param      string &$script The script will be modified in this method.
-     * @see        PeerBuilder::addSelectMethods()
-     */
-    protected function addSelectMethods(&$script)
-    {
-        $table = $this->getTable();
-
-        parent::addSelectMethods($script);
-
-        $this->addDoCountJoin($script);
-        $this->addDoSelectJoin($script);
-
-        $countFK = count($table->getForeignKeys());
-
-        $includeJoinAll = true;
-
-        foreach ($this->getTable()->getForeignKeys() as $fk) {
-            $tblFK = $table->getDatabase()->getTable($fk->getForeignTableName());
-            $this->declareClassFromBuilder($this->getNewStubPeerBuilder($tblFK));
-            if ($tblFK->isForReferenceOnly()) {
-                $includeJoinAll = false;
-            }
-        }
-
-        if ($includeJoinAll) {
-            if ($countFK > 0) {
-                $this->addDoCountJoinAll($script);
-                $this->addDoSelectJoinAll($script);
-            }
-            if ($countFK > 1) {
-                $this->addDoCountJoinAllExcept($script);
-                $this->addDoSelectJoinAllExcept($script);
-            }
-        }
     }
 
     /**
@@ -2166,7 +1735,7 @@ abstract class ".$this->getClassname(). $extendingPeerClass . " {
 
         // Set the correct dbName if it has not been overridden
         if (\$criteria->getDbName() == Propel::getServiceContainer()->getDefaultDatasource()) {
-            \$criteria->setDbName(self::DATABASE_NAME);
+            \$criteria->setDbName({$this->getTableMapClass()}::DATABASE_NAME);
         }
 
         ".$this->getPeerClassname()."::addSelectColumns(\$criteria);
@@ -2298,7 +1867,7 @@ abstract class ".$this->getClassname(). $extendingPeerClass . " {
         // We need to set the primary table name, since in the case that there are no WHERE columns
         // it will be impossible for the BasePeer::createSelectSql() method to determine which
         // tables go into the FROM clause.
-        \$criteria->setPrimaryTableName(".$this->getPeerClassname()."::TABLE_NAME);
+        \$criteria->setPrimaryTableName(".$this->getTableMapClass()."::TABLE_NAME);
 
         if (\$distinct && !in_array(Criteria::DISTINCT, \$criteria->getSelectModifiers())) {
             \$criteria->setDistinct();
@@ -2311,10 +1880,10 @@ abstract class ".$this->getClassname(). $extendingPeerClass . " {
         \$criteria->clearOrderByColumns(); // ORDER BY won't ever affect the count
 
         // Set the correct dbName
-        \$criteria->setDbName(self::DATABASE_NAME);
+        \$criteria->setDbName({$this->getTableMapClass()}::DATABASE_NAME);
 
         if (null === \$con) {
-            \$con = Propel::getServiceContainer()->getReadConnection(".$this->getPeerClassname()."::DATABASE_NAME);
+            \$con = Propel::getServiceContainer()->getReadConnection(".$this->getTableMapClass()."::DATABASE_NAME);
         }
 ";
                         $script .= $this->addCriteriaJoin($fk, $table, $joinTable, $joinedTablePeerBuilder);
@@ -2369,7 +1938,7 @@ abstract class ".$this->getClassname(). $extendingPeerClass . " {
 
         // Set the correct dbName if it has not been overridden
         if (\$criteria->getDbName() == Propel::getServiceContainer()->getDefaultDatasource()) {
-            \$criteria->setDbName(self::DATABASE_NAME);
+            \$criteria->setDbName({$this->getTableMapClass()}::DATABASE_NAME);
         }
 
         ".$this->getPeerClassname()."::addSelectColumns(\$criteria);
@@ -2537,7 +2106,7 @@ abstract class ".$this->getClassname(). $extendingPeerClass . " {
         // We need to set the primary table name, since in the case that there are no WHERE columns
         // it will be impossible for the BasePeer::createSelectSql() method to determine which
         // tables go into the FROM clause.
-        \$criteria->setPrimaryTableName(".$this->getPeerClassname()."::TABLE_NAME);
+        \$criteria->setPrimaryTableName(".$this->getTableMapClass()."::TABLE_NAME);
 
         if (\$distinct && !in_array(Criteria::DISTINCT, \$criteria->getSelectModifiers())) {
             \$criteria->setDistinct();
@@ -2550,10 +2119,10 @@ abstract class ".$this->getClassname(). $extendingPeerClass . " {
         \$criteria->clearOrderByColumns(); // ORDER BY won't ever affect the count
 
         // Set the correct dbName
-        \$criteria->setDbName(self::DATABASE_NAME);
+        \$criteria->setDbName({$this->getTableMapClass()}::DATABASE_NAME);
 
         if (null === \$con) {
-            \$con = Propel::getServiceContainer()->getReadConnection(".$this->getPeerClassname()."::DATABASE_NAME);
+            \$con = Propel::getServiceContainer()->getReadConnection(".$this->getTableMapClass()."::DATABASE_NAME);
         }
 ";
 
@@ -2629,7 +2198,7 @@ abstract class ".$this->getClassname(). $extendingPeerClass . " {
         // \$criteria->getDbName() will return the same object if not set to another value
         // so == check is okay and faster
         if (\$criteria->getDbName() == Propel::getServiceContainer()->getDefaultDatasource()) {
-            \$criteria->setDbName(self::DATABASE_NAME);
+            \$criteria->setDbName({$this->getTableMapClass()}::DATABASE_NAME);
         }
 
         ".$this->getPeerClassname()."::addSelectColumns(\$criteria);
@@ -2808,7 +2377,7 @@ abstract class ".$this->getClassname(). $extendingPeerClass . " {
         // We need to set the primary table name, since in the case that there are no WHERE columns
         // it will be impossible for the BasePeer::createSelectSql() method to determine which
         // tables go into the FROM clause.
-        \$criteria->setPrimaryTableName(".$this->getPeerClassname()."::TABLE_NAME);
+        \$criteria->setPrimaryTableName(".$this->getTableMapClass()."::TABLE_NAME);
 
         if (\$distinct && !in_array(Criteria::DISTINCT, \$criteria->getSelectModifiers())) {
             \$criteria->setDistinct();
@@ -2821,10 +2390,10 @@ abstract class ".$this->getClassname(). $extendingPeerClass . " {
         \$criteria->clearOrderByColumns(); // ORDER BY should not affect count
 
         // Set the correct dbName
-        \$criteria->setDbName(self::DATABASE_NAME);
+        \$criteria->setDbName({$this->getTableMapClass()}::DATABASE_NAME);
 
         if (null === \$con) {
-            \$con = Propel::getServiceContainer()->getReadConnection(".$this->getPeerClassname()."::DATABASE_NAME);
+            \$con = Propel::getServiceContainer()->getReadConnection(".$this->getTableMapClass()."::DATABASE_NAME);
         }
     ";
 

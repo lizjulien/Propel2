@@ -30,6 +30,42 @@ use Propel\Runtime\Map\Exception\RelationNotFoundException;
 class TableMap
 {
     /**
+     * phpname type
+     * e.g. 'AuthorId'
+     */
+    const TYPE_PHPNAME = 'phpName';
+
+    /**
+     * studlyphpname type
+     * e.g. 'authorId'
+     */
+    const TYPE_STUDLYPHPNAME = 'studlyPhpName';
+
+    /**
+     * column (peer) name type
+     * e.g. 'book.AUTHOR_ID'
+     */
+    const TYPE_COLNAME = 'colName';
+
+    /**
+     * column part of the column peer name
+     * e.g. 'AUTHOR_ID'
+     */
+    const TYPE_RAW_COLNAME = 'rawColName';
+
+    /**
+     * column fieldname type
+     * e.g. 'author_id'
+     */
+    const TYPE_FIELDNAME = 'fieldName';
+
+    /**
+     * num type
+     * simply the numerical array index, e.g. 4
+     */
+    const TYPE_NUM = 'num';
+
+    /**
      * Columns in the table
      *
      * @var array[\Propel\Runtime\Map\TableMap]
@@ -204,7 +240,7 @@ class TableMap
 
     /**
      * Set the Classname of the Table. Could be useful for calling
-     * Peer and Object methods dynamically.
+     * TableMap and Object methods dynamically.
      *
      * @param      string $classname The Classname
      */
